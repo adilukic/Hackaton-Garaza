@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScreenSmart — Analyst Queue</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="analyst.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22">
+          <path d="M12 3l7 2.5v5c0 4.2-2.9 7.6-7 8.9-4.1-1.3-7-4.7-7-8.9v-5L12 3z"/>
+          <path d="M8.7 12.2l2.2 2.2 4.3-4.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <h1>Screen<span>Smart</span></h1>
+        <p>Analyst Review Queue</p>
+      </div>
+    </div>
+    <div class="topbar-status">
+      <div class="stat"><span class="stat-k" id="stat-total">—</span><span class="stat-l">Pending review</span></div>
+      <div class="stat"><span class="stat-k" id="stat-high">—</span><span class="stat-l">High risk</span></div>
+      <div class="divider" aria-hidden="true"></div>
+      <div class="engine-state">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div class="engine-state-text">
+          <strong>Analyst workspace</strong>
+          <time id="clock">--:--:-- UTC</time>
+        </div>
+      </div>
+      <a href="/" class="back-link">← Screening console</a>
+    </div>
+  </header>
+
+  <div class="analyst-layout">
+    <!-- LEFT: queue list -->
+    <aside class="queue-sidebar">
+      <div class="queue-header">
+        <h2>Review queue</h2>
+        <button class="refresh-btn" id="refresh-btn" title="Refresh queue">
+          <svg viewBox="0 0 24 24" width="15" height="15"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        </button>
+      </div>
+      <div class="queue-empty" id="queue-empty" hidden>
+        <svg viewBox="0 0 24 24" width="32" height="32"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <p>Queue is clear</p>
+        <span>No transactions pending review</span>
+      </div>
+      <ul class="queue-list" id="queue-list"></ul>
+    </aside>
+
+    <!-- RIGHT: detail + connected -->
+    <main class="analyst-main">
+      <!-- idle state -->
+      <div class="analyst-idle" id="analyst-idle">
+        <svg viewBox="0 0 24 24" width="48" height="48"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <p>Select a transaction from the queue to review</p>
+      </div>
+
+      <!-- detail panel -->
+      <div class="analyst-detail" id="analyst-detail" hidden>
+
+        <div class="detail-header">
+          <div class="detail-verdict" id="detail-verdict-badge"></div>
+          <div class="detail-meta">
+            <span class="detail-name" id="detail-name"></span>
+            <span class="detail-sub" id="detail-sub"></span>
+          </div>
+          <div class="detail-actions">
+            <button class="action-btn release" id="btn-release">Release</button>
+            <button class="action-btn block"   id="btn-block">Block</button>
+            <button class="action-btn escalate" id="btn-escalate">Escalate</button>
+          </div>
+        </div>
+
+        <div class="detail-score-row">
+          <span class="score-label">Risk score</span>
+          <span class="score-value mono" id="detail-score"></span>
+          <div class="meter" id="detail-meter" style="flex:1;margin:0 12px">
+            <div class="meter-fill" id="detail-meter-fill"></div>
+            <span class="meter-tick" id="detail-tick-review"></span>
+            <span class="meter-tick" id="detail-tick-match"></span>
+          </div>
+        </div>
+
+        <div class="detail-reason" id="detail-reason"></div>
+
+        <div class="detail-grid" id="detail-grid"></div>
+
+        <!-- connected transactions -->
+        <div class="connected-section">
+          <div class="connected-header">
+            <h3>Connected suspicious transactions</h3>
+            <span class="connected-count" id="connected-count"></span>
+          </div>
+          <div class="connected-loading" id="connected-loading" hidden>
+            <span class="bench-spinner"></span> Scanning transaction history…
+          </div>
+          <div class="connected-empty" id="connected-empty" hidden>
+            No connected suspicious transactions found.
+          </div>
+          <ul class="connected-list" id="connected-list"></ul>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="analyst.js"></script>
+</body>
+</html>

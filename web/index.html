@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScreenSmart — Sanctions Screening</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ===================== HEADER ===================== -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22">
+          <path d="M12 3l7 2.5v5c0 4.2-2.9 7.6-7 8.9-4.1-1.3-7-4.7-7-8.9v-5L12 3z"/>
+          <path d="M8.7 12.2l2.2 2.2 4.3-4.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <h1>Screen<span>Smart</span></h1>
+        <p>Dual-layer sanctions &amp; risk screening</p>
+      </div>
+    </div>
+
+    <div class="topbar-status">
+      <div class="stat"><span class="stat-k" id="stat-entities">—</span><span class="stat-l">Entities</span></div>
+      <div class="stat"><span class="stat-k" id="stat-wallets">—</span><span class="stat-l">Wallets</span></div>
+      <div class="stat"><span class="stat-k" id="stat-hops">—</span><span class="stat-l">Max hops</span></div>
+      <div class="divider" aria-hidden="true"></div>
+      <div class="engine-state">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div class="engine-state-text">
+          <strong>Engine online</strong>
+          <time id="clock">--:--:-- UTC</time>
+        </div>
+      </div>
+      <a href="/analyst" class="analyst-queue-link">Analyst queue →</a>
+    </div>
+  </header>
+
+  <!-- ===================== MAIN ===================== -->
+  <main class="console">
+
+    <!-- ----------- LEFT: INSTRUCTION INPUT ----------- -->
+    <section class="panel panel-input" aria-label="Payment instruction">
+      <div class="panel-head">
+        <span class="panel-index">1</span>
+        <h2>Payment instruction</h2>
+      </div>
+
+      <!-- Rail toggle -->
+      <div class="rail-toggle" id="rail-toggle" data-rail="fiat" role="tablist" aria-label="Payment rail">
+        <span class="rail-thumb" aria-hidden="true"></span>
+        <button class="rail-opt" data-rail="fiat" role="tab" aria-selected="true">Bank transfer</button>
+        <button class="rail-opt" data-rail="crypto" role="tab" aria-selected="false">Crypto transfer</button>
+      </div>
+
+      <!-- FIAT fields -->
+      <form id="form-fiat" class="fieldset is-active" autocomplete="off">
+        <div class="field-row">
+          <label class="field grow">
+            <span class="field-label">Sender</span>
+            <input type="text" name="sender" placeholder="e.g. Global Trade LLC" />
+          </label>
+          <label class="field">
+            <span class="field-label">Sender country</span>
+            <input type="text" name="sender_country" placeholder="e.g. United States" />
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field grow">
+            <span class="field-label">Recipient</span>
+            <input type="text" name="recipient" placeholder="e.g. Sergei Petrov" />
+          </label>
+          <label class="field">
+            <span class="field-label">Recipient country</span>
+            <input type="text" name="recipient_country" placeholder="e.g. Russia" />
+          </label>
+        </div>
+        <label class="field">
+          <span class="field-label">Amount</span>
+          <input type="number" name="amount" step="0.01" min="0" placeholder="e.g. 12000" />
+        </label>
+      </form>
+
+      <!-- CRYPTO fields -->
+      <form id="form-crypto" class="fieldset" autocomplete="off">
+        <label class="field">
+          <span class="field-label">Counterparty wallet</span>
+          <input type="text" name="wallet_address" class="mono" placeholder="0x…" />
+        </label>
+        <label class="field">
+          <span class="field-label">Amount (ETH)</span>
+          <input type="number" name="amount" step="0.0001" min="0" placeholder="0.0" />
+        </label>
+      </form>
+
+      <button class="execute" id="execute">Run screening</button>
+
+      <!-- Worked examples (human, plain-language) -->
+      <div class="examples">
+        <p class="examples-lead">Not sure where to start? Walk through a real situation:</p>
+        <div class="example-list" id="scenario-list"><!-- injected --></div>
+      </div>
+    </section>
+
+    <!-- ----------- RIGHT: VERDICT OUTPUT ----------- -->
+    <section class="panel panel-output" aria-label="Verdict" aria-live="polite">
+      <div class="panel-head">
+        <span class="panel-index">2</span>
+        <h2>Decision</h2>
+        <span class="output-rail-tag" id="output-rail-tag" hidden></span>
+      </div>
+
+      <!-- Idle -->
+      <div class="stage stage-idle is-active" id="stage-idle">
+        <span class="idle-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="40" height="40">
+            <circle cx="11" cy="11" r="7"/>
+            <path d="M16.5 16.5L21 21" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <p class="idle-title">Ready to screen a payment</p>
+        <p class="idle-sub">Enter the details on the left, or try one of the worked examples below. The decision and full audit trail will appear here.</p>
+      </div>
+
+      <!-- Screening progress -->
+      <div class="stage stage-scan" id="stage-scan">
+        <p class="scan-title">Screening<span class="ellipsis"><i>.</i><i>.</i><i>.</i></span></p>
+        <ol class="pipeline" id="pipeline"><!-- injected --></ol>
+      </div>
+
+      <!-- Result -->
+      <div class="stage stage-result" id="stage-result">
+        <div class="verdict-hero" id="verdict-hero">
+          <div class="verdict-badge" id="verdict-badge">
+            <span class="verdict-dot" aria-hidden="true"></span>
+            <span class="verdict-word" id="verdict-word">—</span>
+          </div>
+          <p class="verdict-action" id="verdict-action"></p>
+        </div>
+
+        <div class="score-block">
+          <div class="score-row">
+            <span class="score-label">Risk score</span>
+            <span class="score-value mono" id="score-value">0.00</span>
+          </div>
+          <div class="meter" id="meter">
+            <div class="meter-fill" id="meter-fill"></div>
+            <span class="meter-tick" id="tick-review"></span>
+            <span class="meter-tick" id="tick-match"></span>
+          </div>
+          <div class="meter-legend">
+            <span class="legend-end">0.0</span>
+            <span class="meter-legend-tick" id="legend-review">review</span>
+            <span class="meter-legend-tick" id="legend-match">match</span>
+          </div>
+        </div>
+
+        <div class="reason" id="reason"></div>
+
+        <div class="meta-grid" id="meta-grid"><!-- injected --></div>
+
+        <div class="audit" id="audit"><!-- injected (fiat parties / crypto chain) --></div>
+      </div>
+    </section>
+
+    <!-- ----------- PERFORMANCE BENCHMARK ----------- -->
+    <section class="panel panel-bench" aria-label="Performance benchmark">
+      <div class="panel-head">
+        <span class="panel-index">3</span>
+        <h2>Performance benchmark</h2>
+        <div class="bench-controls">
+          <label class="bench-count-label">Transactions
+            <select id="bench-count">
+              <option value="1000" selected>1,000</option>
+              <option value="5000">5,000</option>
+              <option value="10000">10,000</option>
+            </select>
+          </label>
+          <button class="bench-run" id="bench-run">Run benchmark</button>
+        </div>
+      </div>
+
+      <div class="db-bar">
+        <span class="db-status">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+          <strong id="tx-count">0</strong> transactions stored in the database
+        </span>
+        <button class="db-clear" id="tx-clear">Clear all transactions</button>
+      </div>
+
+      <div class="bench-stage bench-idle is-active" id="bench-idle">
+        <p>Simulate a batch of payments through the engine and measure throughput
+        and latency. The mix mirrors real traffic — mostly clean, with exact
+        hits, fuzzy near-misses, and crypto exposure cases. Nothing leaves your machine.</p>
+      </div>
+
+      <div class="bench-stage bench-running" id="bench-running">
+        <span class="bench-spinner" aria-hidden="true"></span>
+        <p id="bench-running-text">Running…</p>
+      </div>
+
+      <div class="bench-stage bench-results" id="bench-results"><!-- injected --></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>ScreenSmart · compliance prototype</span>
+    <span class="footer-tiers">Normalization · Tier 1 cache · Tier 2 matching · Tier 3 graph trace</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
