@@ -153,7 +153,6 @@ async function selectTransaction(tx) {
   // Action buttons
   document.getElementById('btn-release').onclick  = () => decide(tx, 'release');
   document.getElementById('btn-block').onclick    = () => decide(tx, 'block');
-  document.getElementById('btn-escalate').onclick = () => decide(tx, 'escalate');
 
   // Load connected
   loadConnected(tx);
@@ -202,7 +201,7 @@ async function loadConnected(tx) {
 
 // ── Decision handler ──────────────────────────────────────
 function decide(tx, action) {
-  const labels = { release: 'Released', block: 'Blocked', escalate: 'Escalated' };
+  const labels = { release: 'Released', block: 'Blocked' };
   showToast(`${labels[action]}: ${tx.recipient || tx.wallet_address || tx.sender || '—'}`, action);
 
   // Remove from queue locally

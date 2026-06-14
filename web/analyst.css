@@ -209,10 +209,8 @@
 
 .action-btn.release  { background: #276749; color: #fff; border-color: #276749; }
 .action-btn.block    { background: #9b2c2c; color: #fff; border-color: #9b2c2c; }
-.action-btn.escalate { background: transparent; color: var(--ink); border-color: var(--border); }
 .action-btn.release:hover  { opacity: .85; }
 .action-btn.block:hover    { opacity: .85; }
-.action-btn.escalate:hover { background: var(--border); }
 
 /* ── Score row ───────────────────────────────────────────── */
 .detail-score-row {
@@ -404,7 +402,6 @@
 }
 .decision-toast.release { border-left: 4px solid #276749; }
 .decision-toast.block   { border-left: 4px solid #e53e3e; }
-.decision-toast.escalate{ border-left: 4px solid var(--brand); }
 
 @keyframes slideUp {
   from { transform: translateY(12px); opacity: 0; }

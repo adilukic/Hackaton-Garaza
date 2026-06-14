@@ -44,6 +44,11 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 
+/* The `hidden` attribute must win over author `display` rules
+   (e.g. .analyst-idle { display: flex }), which otherwise override
+   the user-agent [hidden]{display:none} and keep elements visible. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: var(--sans);

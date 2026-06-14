@@ -289,8 +289,14 @@ def _row_from_result(result, source):
         parties = ev.get("parties", {}) or {}
         sender = (parties.get("sender") or {}).get("input_name")
         recipient = (parties.get("recipient") or {}).get("input_name")
-        country = ev.get("country")
-        wallet, amount = None, None
+        # Country lives per-party in the FIAT evidence; record the decisive
+        # party's (the one that drove the verdict), falling back to either side.
+        decisive = parties.get(ev.get("decisive_party")) or {}
+        country = (decisive.get("country")
+                   or (parties.get("recipient") or {}).get("country")
+                   or (parties.get("sender") or {}).get("country"))
+        wallet = None
+        amount = ev.get("amount")
     else:
         sender = recipient = country = None
         wallet = ev.get("wallet_address")

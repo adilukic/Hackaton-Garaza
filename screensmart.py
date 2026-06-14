@@ -45,6 +45,8 @@ No third-party dependencies required (pure standard library).
 
 from __future__ import annotations
 
+import hashlib
+import math
 import re
 import time
 import uuid
@@ -126,6 +128,99 @@ def _amount_risk(amount, tiers):
         if amt >= threshold:
             return modifier, f"large transfer ({label})", edd
     return 0.0, None, False
+
+
+# --- Graduated review scoring -------------------------------------------------
+# A REVIEW score must reflect *how much* risk, not just *that* there is some.
+# The amount tiers above are coarse (a flat modifier per band) and were only
+# ever meant to nudge the composite; reusing them verbatim for the final score
+# made every size-/proximity-driven review collapse onto REVIEW_THRESHOLD. The
+# helpers below spread those reviews across the upper REVIEW band instead, so a
+# borderline case scores near 0.82 and an extreme one approaches the cap. These
+# only change the SCORE we report — never which verdict a transaction gets.
+EDD_SCORE_CAP = 0.95        # amount-only (EDD) review: never enters MATCH territory.
+EXPOSURE_SCORE_CAP = 0.96   # indirect graph-exposure review ceiling.
+REVIEW_BAND_CEILING = 0.94  # all review scores are compressed into
+                            # [REVIEW_THRESHOLD, this] so even near-match reviews
+                            # keep headroom below MATCH to spread into (see below).
+FLOOR_REVIEW_CAP = 0.84     # mandatory "forced" reviews (e.g. adverse-media) sit
+                            # at the very bottom of the band, ordered but lowest.
+
+# Reviews that share a scoring bucket (same hop-distance, a repeated counterparty
+# name, a sub-anchor amount that contributes nothing) would otherwise show an
+# identical score, so the queue stacks up on a handful of values. We add a small
+# offset derived deterministically from the transaction's OWN identifying fields:
+# the same transaction always gets the same score (reproducible & auditable — no
+# RNG), but otherwise-identical-looking reviews spread organically across the band.
+REVIEW_SCORE_SPREAD = 0.045   # width of the deterministic per-transaction spread.
+
+
+def _edd_threshold(tiers):
+    """Smallest transfer value that triggers Enhanced Due Diligence for a rail."""
+    edd = [t[0] for t in tiers if t[3]]
+    return min(edd) if edd else float("inf")
+
+
+FIAT_EDD_THRESHOLD = _edd_threshold(FIAT_AMOUNT_TIERS)
+CRYPTO_EDD_THRESHOLD = _edd_threshold(CRYPTO_AMOUNT_TIERS)
+
+
+def _magnitude_fraction(amount, anchor):
+    """How large ``amount`` is relative to ``anchor``, log-scaled to [0, 1].
+
+    At the anchor (or below) -> 0.0; at 100x the anchor (or more) -> 1.0.
+    Log-scaled because transfer values span orders of magnitude.
+    """
+    try:
+        amt = float(amount or 0)
+    except (TypeError, ValueError):
+        amt = 0.0
+    if anchor <= 0 or amt <= anchor:
+        return 0.0
+    return min(1.0, math.log10(amt / anchor) / 2.0)
+
+
+def _edd_review_score(amount, edd_threshold):
+    """Graduated REVIEW score for an amount-only (EDD) hit.
+
+    Maps the transfer's magnitude onto [REVIEW_THRESHOLD, EDD_SCORE_CAP]: just
+    over the EDD line scores near the floor, an extreme transfer near the cap.
+    """
+    frac = _magnitude_fraction(amount, edd_threshold)
+    return round(REVIEW_THRESHOLD + (EDD_SCORE_CAP - REVIEW_THRESHOLD) * frac, 4)
+
+
+def _floor_review_score(raw_composite):
+    """Score a sub-threshold composite that is *forced* into REVIEW (e.g. by the
+    adverse-media floor). Maps the true composite from
+    [FUZZY_CANDIDATE_THRESHOLD, REVIEW_THRESHOLD] into
+    [REVIEW_THRESHOLD, FLOOR_REVIEW_CAP] so these mandatory reviews keep their
+    relative ordering instead of all collapsing onto the floor, while staying
+    the lowest-priority band.
+    """
+    lo = FUZZY_CANDIDATE_THRESHOLD
+    span = REVIEW_THRESHOLD - lo
+    frac = (raw_composite - lo) / span if span > 0 else 0.0
+    frac = min(1.0, max(0.0, frac))
+    return round(REVIEW_THRESHOLD + (FLOOR_REVIEW_CAP - REVIEW_THRESHOLD) * frac, 4)
+
+
+def _review_spread(evidence):
+    """Deterministic offset in [0, REVIEW_SCORE_SPREAD) from a transaction's own
+    identifying fields. A hash (not RNG) so the same transaction always maps to
+    the same offset — it spreads look-alike reviews without breaking auditability.
+    """
+    parties = evidence.get("parties") or {}
+    parts = [
+        evidence.get("wallet_address"),
+        evidence.get("amount"),
+        evidence.get("distance_to_sanctioned"),
+        (parties.get("sender") or {}).get("input_name"),
+        (parties.get("recipient") or {}).get("input_name"),
+    ]
+    key = "|".join("" if p is None else str(p) for p in parts)
+    digest = int(hashlib.sha256(key.encode()).hexdigest(), 16)
+    return (digest % 100000) / 100000 * REVIEW_SCORE_SPREAD
 
 
 # =============================================================================
@@ -304,6 +399,18 @@ def _build_verdict(
     Every field here exists so an analyst (or auditor, months later) can fully
     reconstruct the decision without access to any other system.
     """
+    # Spread look-alike reviews across the band. First compress the raw review
+    # score into [REVIEW_THRESHOLD, REVIEW_BAND_CEILING] so even near-match
+    # reviews keep headroom below the MATCH line, then add a deterministic offset
+    # centered on that value (so it stacks on neither boundary). MATCH / NO MATCH
+    # scores are left exactly as computed.
+    if verdict == Verdict.REVIEW:
+        raw = min(max(risk_score, REVIEW_THRESHOLD), MATCH_THRESHOLD)
+        frac = (raw - REVIEW_THRESHOLD) / (MATCH_THRESHOLD - REVIEW_THRESHOLD)
+        compressed = REVIEW_THRESHOLD + frac * (REVIEW_BAND_CEILING - REVIEW_THRESHOLD)
+        centered = compressed + _review_spread(evidence) - REVIEW_SCORE_SPREAD / 2
+        risk_score = min(max(centered, REVIEW_THRESHOLD), MATCH_THRESHOLD - 0.001)
+
     return {
         "screening_id": str(uuid.uuid4()),            # unique, traceable id.
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -411,7 +518,7 @@ def _screen_party_against_sanctions(name: str, country: str,
     # released, even if it doesn't resemble any sanctioned name.
     if adverse_modifier > 0.0 and verdict == Verdict.NO_MATCH:
         verdict = Verdict.REVIEW
-        composite = max(composite, REVIEW_THRESHOLD)
+        composite = _floor_review_score(composite)
 
     return {
         "tier": "TIER_2_PROBABILISTIC",
@@ -489,7 +596,7 @@ def evaluate_fiat_payment(sender: str, recipient: str, sender_country: str,
     risk_score = worst["score"]
     if amount_edd and verdict == Verdict.NO_MATCH:
         verdict = Verdict.REVIEW
-        risk_score = max(risk_score, REVIEW_THRESHOLD)
+        risk_score = max(risk_score, _edd_review_score(amount, FIAT_EDD_THRESHOLD))
         edd_triggered = True
 
     # Build the human-readable reason string.
@@ -628,10 +735,16 @@ def evaluate_crypto_payment(wallet_address: str, amount: float) -> dict:
     trace = _trace_to_sanctioned(normalized, MAX_HOPS)
     if trace:
         distance = trace["distance"]
-        # Risk attenuates with distance; a large transfer adds to it. Stays in
-        # the REVIEW band, clamped to 1.0.
-        exposure_score = max(REVIEW_THRESHOLD, min(
-            1.0, round(1.0 - EXPOSURE_DECAY_PER_HOP * distance + amount_modifier, 4)))
+        # Risk attenuates with distance (closer = higher). Map the attenuated
+        # proximity across the REVIEW band so each hop-distance gets a distinct
+        # score instead of collapsing onto the floor, then let the transfer's
+        # magnitude nudge it further up. Clamped to the exposure ceiling.
+        proximity = max(0.0, 1.0 - EXPOSURE_DECAY_PER_HOP * distance)
+        amount_frac = _magnitude_fraction(amount, CRYPTO_EDD_THRESHOLD)
+        band = EXPOSURE_SCORE_CAP - REVIEW_THRESHOLD
+        exposure_score = round(min(
+            EXPOSURE_SCORE_CAP,
+            REVIEW_THRESHOLD + band * proximity + band * 0.4 * amount_frac), 4)
         path_str = " -> ".join(
             [trace["path"][0]["from"]] + [h["to"] for h in trace["path"]]
         )
@@ -665,7 +778,7 @@ def evaluate_crypto_payment(wallet_address: str, amount: float) -> dict:
         return _build_verdict(
             rail="CRYPTO",
             verdict=Verdict.REVIEW,
-            risk_score=max(REVIEW_THRESHOLD, amount_modifier),
+            risk_score=_edd_review_score(amount, CRYPTO_EDD_THRESHOLD),
             reason=(f"REVIEW - enhanced due diligence: {amount_label} "
                     f"({amount} ETH) with no sanctioned exposure."),
             tiers_evaluated=["NORMALIZATION", "TIER_1_DETERMINISTIC", "TIER_3_GRAPH"],
